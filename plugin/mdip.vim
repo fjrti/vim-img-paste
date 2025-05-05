@@ -11,11 +11,11 @@ function! s:SafeMakeDir()
     if !exists('g:mdip_imgdir_absolute')
         if s:os == "Windows"
             let outdir = expand('%:p:h') . '\' . g:mdip_imgdir
-    else
+        else
             let outdir = expand('%:p:h') . '/' . g:mdip_imgdir
         endif
     else
-	let outdir = g:mdip_imgdir
+        let outdir = g:mdip_imgdir
     endif
     if !isdirectory(outdir)
         call mkdir(outdir,"p",0700)
@@ -29,33 +29,26 @@ endfunction
 
 function! s:SaveFileTMPWSL(imgdir, tmpname) abort
     let tmpfile = a:imgdir . '/' . a:tmpname . '.png'
-    let tmpfile = substitute(tmpfile, "\/", "\\\\\\", "g")
-    if tmpfile =~ "mnt"
-        let tmpfile = substitute(tmpfile, "\\\\\\\\mnt\\\\\\\\c", "C:", "g")
-    else
-        let tmpfile = '\\\\wsl\$\\Ubuntu'.tmpfile
-    endif
 
-    let clip_command = 'powershell.exe -nologo -noprofile -noninteractive -sta "Add-Type -Assembly PresentationCore;'.
-          \'\$img = [Windows.Clipboard]::GetImage();'.
-          \'if (\$img -eq \$null) {'.
-          \'echo "Do not contain image.";'.
-          \'Exit;'.
-          \'} else{'.
-          \'echo "good";}'.
-          \'\$fcb = new-object Windows.Media.Imaging.FormatConvertedBitmap(\$img, [Windows.Media.PixelFormats]::Rgb24, \$null, 0);'.
-          \'\$file = \"'. tmpfile . '\";'.
-          \'\$stream = [IO.File]::Open(\$file, \"OpenOrCreate\");'.
-          \'\$encoder = New-Object Windows.Media.Imaging.PngBitmapEncoder;'.
-          \'\$encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create(\$fcb));'.
-          \'\$encoder.Save(\$stream);\$stream.Dispose();"'
+    " convert path to windows
+    "	use wslpath to windows path
+    "	remove cr/lf
+    "	replace \ with \\
+    let wslpath_cmd = 'wslpath -w ' . tmpfile
+    let tmpfile = substitute(system(wslpath_cmd)[:-2], "\\", "\\\\\\", "g")
 
-    let result = system(clip_command)[:-3]
-    if result ==# "good"
+    " optimize img
+    let clip_command = 'img.exe ' . tmpfile
+    let result = system(clip_command)[:-2]
+    if result[:3] ==# "save"
         return tmpfile
     else
+        echo "\n"
+        echo result
         return 1
     endif
+
+    return 1
 endfunction
 
 function! s:SaveFileTMPLinux(imgdir, tmpname) abort
@@ -96,7 +89,7 @@ function! s:SaveFileTMPWin32(imgdir, tmpname) abort
     let clip_command .= "if ($([System.Windows.Forms.Clipboard]::ContainsImage())) {"
     let clip_command .= "[System.Drawing.Bitmap][System.Windows.Forms.Clipboard]::GetDataObject().getimage().Save('"
     let clip_command .= tmpfile ."', [System.Drawing.Imaging.ImageFormat]::Png) }"
-    let clip_command = "powershell -nologo -noprofile -noninteractive -sta \"".clip_command. "\""
+    let clip_command = "/mnt/c/windows/System32/WindowsPowerShell/v1.0/powershell.exe -nologo -noprofile -noninteractive -sta \"".clip_command. "\""
 
     silent call system(clip_command)
     if v:shell_error == 1
@@ -162,8 +155,8 @@ function! s:RandomName()
     " help feature-list
     if has('win16') || has('win32') || has('win64') || has('win95')
         let l:new_random = strftime("%Y-%m-%d-%H-%M-%S")
-        " creates a file like this: `2019-11-12-10-27-10.png`
-        " the filesystem on Windows does not allow : character.
+    " creates a file like this: `2019-11-12-10-27-10.png`
+    " the filesystem on Windows does not allow : character.
     else
         let l:new_random = strftime("%Y-%m-%d-%H-%M-%S")
     endif
@@ -178,11 +171,11 @@ function! s:InputName()
 endfunction
 
 function! g:MarkdownPasteImage(relpath)
-        execute "normal! i![" . g:mdip_tmpname[0:0]
-        let ipos = getcurpos()
-        execute "normal! a" . g:mdip_tmpname[1:] . "](" . a:relpath . ")"
-        call setpos('.', ipos)
-        execute "normal! vt]\<C-g>"
+    execute "normal! i![" . g:mdip_tmpname[0:0]
+    let ipos = getcurpos()
+    execute "normal! a" . g:mdip_tmpname[1:] . "](" . a:relpath . ")"
+    call setpos('.', ipos)
+    execute "normal! vt]\<C-g>"
 endfunction
 
 function! g:LatexPasteImage(relpath)
@@ -212,7 +205,7 @@ function! mdip#MarkdownClipboardImage()
         " change temp-file-name and image-name
         let g:mdip_tmpname = s:InputName()
         if empty(g:mdip_tmpname)
-          let g:mdip_tmpname = g:mdip_imgname . '_' . s:RandomName()
+            let g:mdip_tmpname = g:mdip_imgname . '_' . s:RandomName()
         endif
         let testpath =  workdir . '/' . g:mdip_tmpname . '.png'
         if filereadable(testpath) == 0
